@@ -1,8 +1,9 @@
 package com.example.demo.bean;
 
 import java.io.IOException;
-import java.util.logging.Logger;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -18,7 +19,7 @@ import jakarta.faces.context.FacesContext;
 public class LoginBean extends BaseBean {
 
 	private static final long serialVersionUID = 1L;
-	private static final Logger logger = Logger.getLogger(LoginBean.class.getName());
+	private static final Logger logger = LoggerFactory.getLogger(LoginBean.class);
 
 	@Autowired
 	private PracticaSvc practicaSvc;
@@ -28,23 +29,38 @@ public class LoginBean extends BaseBean {
 
 	public String login() {
 		Usuario usuario = practicaSvc.buscarPorCorreo(username);
-		UsuarioRol userRol = new UsuarioRol();
-		if (usuario != null) {
-			userRol = practicaSvc.findByUsuarioCorreo(username);
-			System.out.println("El Usuario: " + usuario.getNombreCompleto() + " Con Rol: "
-					+ userRol.getRol().getNombre() + " ha Iniciado Sesión");
-		}
-
 		if (usuario != null && usuario.getContrasenia().equals(password)) {
-			// Guardar usuario en sesión
-			FacesContext.getCurrentInstance().getExternalContext().getSessionMap().put("currentUser", usuario);
-
-			addInfoMessage("Bienvenido", usuario.getNombreCompleto());
-			return "/pages/home?faces-redirect=true";
-		} else {
-			addErrorMessage("Error de autenticación", "Credenciales inválidas");
-			return null;
+			UsuarioRol userRol = practicaSvc.findByUsuarioCorreo(username);
+			if (userRol != null) {
+				// Guardar usuario y rol en sesión
+				FacesContext.getCurrentInstance().getExternalContext().getSessionMap().put("currentUser", usuario);
+				FacesContext.getCurrentInstance().getExternalContext().getSessionMap().put("userRole", userRol.getRol().getNombre());
+				
+				logger.info("El Usuario: {} con Username: {} y Rol: {} ha iniciado sesión", 
+					usuario.getNombreCompleto(), 
+					usuario.getCorreo(),
+					userRol.getRol().getNombre());
+				
+				addInfoMessage("Bienvenido", usuario.getNombreCompleto());
+				
+				try {
+                    String contextPath = FacesContext.getCurrentInstance().getExternalContext().getRequestContextPath();
+                    String targetPage = "ADMIN".equals(userRol.getRol().getNombre()) ? 
+                        contextPath + "/pages/home-admin.xhtml" : 
+                        contextPath + "/pages/home-user.xhtml";
+                    FacesContext.getCurrentInstance().getExternalContext().redirect(targetPage);
+                    return null;
+                } catch (IOException e) {
+                    logger.error("Error al redirigir después del login: {}", e.getMessage());
+                    addErrorMessage("Error", "Error al redirigir después del login");
+                    return null;
+                }
+			}
 		}
+		
+		logger.warn("Intento fallido de inicio de sesión para usuario: {}", username);
+		addErrorMessage("Error de autenticación", "Credenciales inválidas");
+		return null;
 	}
 
 	public String logout() {
@@ -78,11 +94,11 @@ public class LoginBean extends BaseBean {
 						.redirect(FacesContext.getCurrentInstance().getExternalContext().getRequestContextPath()
 								+ "/pages/ping.xhtml");
 			} catch (IOException e) {
-				logger.severe("Error al redirigir: " + e.getMessage());
+				logger.error("Error al redirigir: {}", e.getMessage());
 				addErrorMessage("Error", "Error al redirigir a ping");
 			}
 		} else {
-			logger.warning("Intento de acceso sin autenticación");
+			logger.warn("Intento de acceso sin autenticación");
 			addErrorMessage("Error", "Debe iniciar sesión primero");
 		}
 	}

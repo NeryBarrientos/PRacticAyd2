@@ -1,9 +1,10 @@
 package com.example.demo.security;
 
 import java.io.IOException;
-import java.util.logging.Logger;
 
-import jakarta.faces.application.NavigationHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.event.PhaseEvent;
 import jakarta.faces.event.PhaseId;
@@ -11,7 +12,88 @@ import jakarta.faces.event.PhaseListener;
 
 public class AuthorizationListener implements PhaseListener {
     private static final long serialVersionUID = 1L;
-    private static final Logger logger = Logger.getLogger(AuthorizationListener.class.getName());
+    private static final Logger logger = LoggerFactory.getLogger(AuthorizationListener.class);
+    
+    @Override
+    public void afterPhase(PhaseEvent event) {
+        FacesContext facesContext = event.getFacesContext();
+        
+        // Si no hay ViewRoot, es probablemente una petición inicial o una redirección
+        if (facesContext.getViewRoot() == null) {
+            return;
+        }
+        
+        String currentPage = facesContext.getViewRoot().getViewId();
+        logger.debug("Página actual: {}", currentPage);
+        
+        // Verificar si es una petición de recursos
+        if (currentPage.contains("/jakarta.faces.resource/")) {
+            return;
+        }
+        
+        // Páginas públicas (no requieren autenticación)
+        if (currentPage.contains("login.xhtml")) {
+            // Si el usuario ya está autenticado y trata de acceder a login, redirigir a su página de inicio
+            Object currentUser = facesContext.getExternalContext().getSessionMap().get("currentUser");
+            if (currentUser != null) {
+                String userRole = (String) facesContext.getExternalContext().getSessionMap().get("userRole");
+                redirectToHomePage(facesContext, userRole);
+            }
+            return;
+        }
+        
+        // Para todas las demás páginas, verificar autenticación
+        Object currentUser = facesContext.getExternalContext().getSessionMap().get("currentUser");
+        String userRole = (String) facesContext.getExternalContext().getSessionMap().get("userRole");
+        
+        // Si no hay usuario logueado, redirigir a login
+        if (currentUser == null) {
+            logger.warn("Intento de acceso sin autenticación a: {}", currentPage);
+            handleUnauthorizedAccess(facesContext, "Debe iniciar sesión primero");
+            return;
+        }
+        
+        // Verificar permisos basados en roles
+        if (currentPage.contains("home-admin.xhtml") && !"ADMIN".equals(userRole)) {
+            logger.warn("Usuario con rol {} intentó acceder a página de admin", userRole);
+            handleUnauthorizedAccess(facesContext, "No tiene permiso para acceder a esta página");
+            return;
+        }
+        
+        if (currentPage.contains("home-user.xhtml") && !"USER".equals(userRole)) {
+            logger.warn("Usuario con rol {} intentó acceder a página de usuario", userRole);
+            handleUnauthorizedAccess(facesContext, "No tiene permiso para acceder a esta página");
+            return;
+        }
+        
+        // Redireccionar a la página de inicio si está en la raíz o index
+        if (currentPage.equals("/") || currentPage.equals("/index.xhtml")) {
+            redirectToHomePage(facesContext, userRole);
+        }
+    }
+    
+    private void redirectToHomePage(FacesContext facesContext, String userRole) {
+        try {
+            String contextPath = facesContext.getExternalContext().getRequestContextPath();
+            String targetPage = "ADMIN".equals(userRole) ? "/pages/home-admin.xhtml" : "/pages/home-user.xhtml";
+            logger.info("Redirigiendo a página de inicio: {}", targetPage);
+            facesContext.getExternalContext().redirect(contextPath + targetPage);
+        } catch (IOException e) {
+            logger.error("Error redirigiendo a página de inicio: {}", e.getMessage());
+        }
+    }
+
+    private void handleUnauthorizedAccess(FacesContext facesContext, String message) {
+        try {
+            facesContext.getExternalContext().getSessionMap().put("errorMessage", message);
+            String contextPath = facesContext.getExternalContext().getRequestContextPath();
+            facesContext.getExternalContext().redirect(contextPath + "/pages/login.xhtml");
+        } catch (IOException e) {
+            logger.error("Error redirigiendo a login: {}", e.getMessage());
+        }
+    }
+    private static final long serialVersionUID = 1L;
+    private static final Logger logger = LoggerFactory.getLogger(AuthorizationListener.class);
     
     @Override
     public void afterPhase(PhaseEvent event) {
@@ -19,48 +101,79 @@ public class AuthorizationListener implements PhaseListener {
         
         // Si no hay ViewRoot, es probablemente una petición inicial
         if (facesContext.getViewRoot() == null) {
-            try {
-                String contextPath = facesContext.getExternalContext().getRequestContextPath();
-                facesContext.getExternalContext().redirect(contextPath + "/pages/login.xhtml");
-                return;
-            } catch (IOException e) {
-                logger.severe("Error redirigiendo a login: " + e.getMessage());
-            }
             return;
         }
         
         String currentPage = facesContext.getViewRoot().getViewId();
-        logger.info("Página actual: " + currentPage);
+        logger.debug("Página actual: {}", currentPage);
         
-        // Redireccionar a login si es la raíz
-        if (currentPage.equals("/")) {
-            try {
-                String contextPath = facesContext.getExternalContext().getRequestContextPath();
-                facesContext.getExternalContext().redirect(contextPath + "/pages/login.xhtml");
-                return;
-            } catch (IOException e) {
-                logger.severe("Error al redirigir a login: " + e.getMessage());
-            }
-        }
-        
-        boolean isLoginPage = currentPage.lastIndexOf("login.xhtml") > -1;
-        boolean isResourceRequest = currentPage.contains("/jakarta.faces.resource/");
-        
-        if (isResourceRequest) {
+        // Verificar si es una petición de recursos
+        if (currentPage.contains("/jakarta.faces.resource/")) {
             return;
         }
         
-        Object currentUser = facesContext.getExternalContext()
-                                       .getSessionMap()
-                                       .get("currentUser");
+        // Páginas públicas (no requieren autenticación)
+        if (currentPage.contains("login.xhtml")) {
+            // Si el usuario ya está autenticado y trata de acceder a login, redirigir a su página de inicio
+            Object currentUser = facesContext.getExternalContext().getSessionMap().get("currentUser");
+            if (currentUser != null) {
+                String userRole = (String) facesContext.getExternalContext().getSessionMap().get("userRole");
+                redirectToHomePage(facesContext, userRole);
+                return;
+            }
+            return;
+        }
         
-        if (!isLoginPage && currentUser == null) {
-            logger.info("Unauthorized access attempt to " + currentPage);
-            NavigationHandler nh = facesContext.getApplication().getNavigationHandler();
-            nh.handleNavigation(facesContext, null, "/pages/login?faces-redirect=true");
+        Object currentUser = facesContext.getExternalContext().getSessionMap().get("currentUser");
+        String userRole = (String) facesContext.getExternalContext().getSessionMap().get("userRole");
+        
+        // Si no hay usuario logueado, redirigir a login
+        if (currentUser == null) {
+            logger.warn("Intento de acceso sin autenticación a: {}", currentPage);
+            handleUnauthorizedAccess(facesContext, "Debe iniciar sesión primero");
+            return;
+        }
+        
+        // Verificar permisos basados en roles
+        if (currentPage.contains("home-admin.xhtml") && !"ADMIN".equals(userRole)) {
+            logger.warn("Usuario con rol {} intentó acceder a página de admin", userRole);
+            handleUnauthorizedAccess(facesContext, "No tiene permiso para acceder a esta página");
+            return;
+        }
+        
+        // Otras verificaciones de seguridad si son necesarias
+        if (currentPage.contains("home-user.xhtml") && !"USER".equals(userRole)) {
+            logger.warn("Usuario con rol {} intentó acceder a página de usuario", userRole);
+            handleUnauthorizedAccess(facesContext, "No tiene permiso para acceder a esta página");
+            return;
+        }
+        
+        // Redireccionar a la página de inicio correspondiente si está en la raíz
+        if (currentPage.equals("/") || currentPage.equals("/index.xhtml")) {
+            redirectToHomePage(facesContext, userRole);
         }
     }
     
+    private void redirectToHomePage(FacesContext facesContext, String userRole) {
+        try {
+            String contextPath = facesContext.getExternalContext().getRequestContextPath();
+            String targetPage = "ADMIN".equals(userRole) ? "/pages/home-admin.xhtml" : "/pages/home-user.xhtml";
+            facesContext.getExternalContext().redirect(contextPath + targetPage);
+        } catch (IOException e) {
+            logger.error("Error redirigiendo a página de inicio: {}", e.getMessage());
+        }
+    }
+
+    private void handleUnauthorizedAccess(FacesContext facesContext, String message) {
+        try {
+            facesContext.getExternalContext().getSessionMap().put("errorMessage", message);
+            String contextPath = facesContext.getExternalContext().getRequestContextPath();
+            facesContext.getExternalContext().redirect(contextPath + "/pages/login.xhtml");
+        } catch (IOException e) {
+            logger.error("Error redirigiendo a login: {}", e.getMessage());
+        }
+    }
+
     @Override
     public void beforePhase(PhaseEvent event) {
         // No necesitamos hacer nada antes de la fase

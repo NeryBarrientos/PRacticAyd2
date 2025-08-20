@@ -18,14 +18,14 @@ public class UsuarioRol implements Serializable {
 
 	@Id
 	@Column(name = "id_usuario_rol")
-	private Long idRol;
+	private Long idUsuarioRol;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "usuario")
+	@JoinColumn(name = "usuario", referencedColumnName = "id_usuario")
 	private Usuario usuario;
 
 	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name = "rol")
+	@JoinColumn(name = "rol", referencedColumnName = "id_rol")
 	private Rol rol;
 
 	public UsuarioRol() {
@@ -33,19 +33,19 @@ public class UsuarioRol implements Serializable {
 		// TODO Auto-generated constructor stub
 	}
 
-	public UsuarioRol(Long idRol, Usuario usuario, Rol rol) {
+	public UsuarioRol(Long idUsuarioRol, Usuario usuario, Rol rol) {
 		super();
-		this.idRol = idRol;
+		this.idUsuarioRol = idUsuarioRol;
 		this.usuario = usuario;
 		this.rol = rol;
 	}
 
-	public Long getIdRol() {
-		return idRol;
+	public Long getIdUsuarioRol() {
+		return idUsuarioRol;
 	}
 
-	public void setIdRol(Long idRol) {
-		this.idRol = idRol;
+	public void setIdUsuarioRol(Long idUsuarioRol) {
+		this.idUsuarioRol = idUsuarioRol;
 	}
 
 	public Usuario getUsuario() {
@@ -66,7 +66,7 @@ public class UsuarioRol implements Serializable {
 
 	@Override
 	public String toString() {
-		return "UsuarioRol [idRol=" + idRol + ", usuario=" + usuario.toString() + ", rol=" + rol.toString() + "]";
+		return "UsuarioRol [idUsuarioRol=" + idUsuarioRol + ", usuario=" + usuario.toString() + ", rol=" + rol.toString() + "]";
 	}
 
 }
